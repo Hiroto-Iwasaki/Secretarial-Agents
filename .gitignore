@@ -28,3 +28,9 @@ dist/
 *.swp
 *.swo
 .idea/
+
+# Node.js
+node_modules/
+
+# Secretarial Agents
+TABLES.md

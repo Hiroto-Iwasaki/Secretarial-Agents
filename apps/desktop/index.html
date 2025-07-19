@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Secretarial Agents Desktop</title>
+</head>
+<body>
+  <h1>Hello, Secretarial Agents Desktop!</h1>
+  <p id="core-msg"></p>
+  <p id="api-msg"></p>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // デバッグ: window.secretarialAPIの中身を出力
+      console.log('window.secretarialAPI:', window.secretarialAPI);
+      document.body.insertAdjacentHTML('beforeend', '<pre>' + JSON.stringify(window.secretarialAPI, null, 2) + '</pre>');
+      
+      // もしAPIが存在すればメッセージ表示
+      if (window.secretarialAPI) {
+        document.getElementById('core-msg').innerText = window.secretarialAPI.helloCore ? window.secretarialAPI.helloCore() : 'no helloCore';
+        document.getElementById('api-msg').innerText = window.secretarialAPI.helloApi ? window.secretarialAPI.helloApi() : 'no helloApi';
+      } else {
+        document.getElementById('core-msg').innerText = 'secretarialAPI not found';
+        document.getElementById('api-msg').innerText = '';
+      }
+    });
+  </script>
+</body>
+</html>

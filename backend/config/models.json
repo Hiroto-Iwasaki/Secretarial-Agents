@@ -1,0 +1,29 @@
+{
+  "openai": {
+    "default": "gpt-4.1-mini",
+    "candidates": [
+      { "name": "gpt-4.1-mini", "tags": ["dialog", "slide", "research"] },
+      { "name": "gpt-4o", "tags": ["dialog", "slide", "research"] },
+      { "name": "gpt-3.5-turbo", "tags": ["dialog", "slide"] },
+      { "name": "whisper-1", "tags": ["stt"] },
+      { "name": "tts-1", "tags": ["tts"] },
+      { "name": "tts-1-hd", "tags": ["tts"] }
+    ]
+  },
+  "google": {
+    "default": "google-stt-v2",
+    "candidates": [
+      { "name": "google-stt-v2", "tags": ["stt"] },
+      { "name": "google-stt-v1", "tags": ["stt"] },
+      { "name": "google-tts-v2", "tags": ["tts"] }
+    ]
+  },
+  "azure": {
+    "default": "azure-tts-jp",
+    "candidates": [
+      { "name": "azure-tts-jp", "tags": ["tts"] },
+      { "name": "azure-tts-en", "tags": ["tts"] }
+    ]
+  }
+}
+
