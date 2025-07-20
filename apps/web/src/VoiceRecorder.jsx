@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { transcribeAudio } from './services/apiClient';
 import { useAuth } from './AuthContext';
 import './VoiceComponents.css';
 
@@ -63,12 +62,29 @@ const VoiceRecorder = ({ onTranscription, onError }) => {
     setIsProcessing(true);
     
     try {
-      const audioFile = new File([audioBlob], 'recording.wav', { type: 'audio/wav' });
-      const result = await transcribeAudio(audioFile, user.id);
-      onTranscription(result.text);
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('userId', user.id);
+      
+      const response = await fetch('http://localhost:3001/api/stt', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error(`STT API エラー: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.text) {
+        onTranscription?.(result.text);
+      } else {
+        onError?.('音声認識に失敗しました');
+      }
     } catch (error) {
-      console.error('音声認識エラー:', error);
-      onError('音声認識に失敗しました。もう一度お試しください。');
+      console.error('STT処理エラー:', error);
+      onError?.('音声認識処理中にエラーが発生しました');
     } finally {
       setIsProcessing(false);
     }

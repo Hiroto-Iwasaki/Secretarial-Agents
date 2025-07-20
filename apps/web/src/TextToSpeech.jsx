@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from './AuthContext';
-import { synthesizeSpeech } from './services/apiClient';
 import './VoiceComponents.css';
 
 const TextToSpeech = ({ text, onError }) => {
@@ -28,36 +27,43 @@ const TextToSpeech = ({ text, onError }) => {
     setIsGenerating(true);
     
     try {
-      const result = await synthesizeSpeech(text, user?.id, selectedVoice);
+      const response = await fetch('http://localhost:3001/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: text,
+          userId: user.id,
+          voice: selectedVoice
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`TTS API エラー: ${response.status}`);
+      }
+      
+      const result = await response.json();
       
       if (result.audio) {
-        // Base64音声データを再生
-        const audioBlob = new Blob(
-          [Uint8Array.from(atob(result.audio), c => c.charCodeAt(0))],
-          { type: 'audio/mpeg' }
-        );
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
+        // Base64音声データをBlobに変換
+        const audioData = atob(result.audio);
+        const arrayBuffer = new ArrayBuffer(audioData.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
         
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          setIsPlaying(false);
-        };
+        for (let i = 0; i < audioData.length; i++) {
+          uint8Array[i] = audioData.charCodeAt(i);
+        }
         
-        audio.onerror = () => {
-          console.error('音声再生エラー');
-          setIsPlaying(false);
-          onError?.('音声再生に失敗しました');
-        };
-        
-        await audio.play();
-        setIsPlaying(true);
+        const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
       } else {
-        throw new Error('音声データが取得できませんでした');
+        onError?.('音声合成に失敗しました');
       }
     } catch (error) {
       console.error('TTS処理エラー:', error);
-      onError?.('音声合成に失敗しました。もう一度お試しください。');
+      onError?.('音声合成処理中にエラーが発生しました');
     } finally {
       setIsGenerating(false);
     }

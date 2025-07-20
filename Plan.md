@@ -1,5 +1,47 @@
 # 🎉 Phase 1完成：STT/TTS基盤機能と音声チャット体験
 
+---
+
+# 🚀 Phase 2 Implementation Plan: Real-Time Voice Assistant ("ジャーニー")
+
+## 🏆 Phase 2の目標
+- 「ジャーニー」ウェイクワードで起動する常時オン・リアルタイム音声アシスタント基盤の構築
+- 技術: WebRTC, Web Audio API, WebSocket, MediaRecorder API, OpenAI Realtime API, Node.js Streams, Buffer管理
+- 設計原則: シンプル・モダン・拡張性・単一責任原則・可読性重視
+- セキュリティ・プライバシー: 通信暗号化・認証・ローカル処理優先
+- 最小構成(音声ストリーミング)→音声一時保存→STT連携→VAD拡張の段階的実装
+- 各機能は専用モジュール(WebSocketManager, AudioStreamer, RealtimeSTT, RealtimeTTS等)で実装
+
+## 📋 Phase 2 Task List
+- [x] WebSocketサーバー実装
+- [x] WebSocketクライアント実装
+- [x] 双方向通信(接続・切断・テキスト送信)
+- [x] MediaRecorderによる音声キャプチャ・ストリーミング送信
+- [x] サーバー側音声一時保存
+- [x] 区間保存API実装
+- [ ] 音声品質最適化(ノイズキャンセリング等)
+- [ ] バッファリング・レイテンシ最適化
+- [ ] OpenAI Realtime API統合
+- [ ] ストリーミングSTT(連続音声認識)実装
+- [ ] 部分認識結果の表示
+- [ ] 認識精度向上
+- [ ] ストリーミングAI応答生成
+- [ ] リアルタイム音声合成(TTS)
+- [ ] 応答レイテンシ最適化(<1秒目標)
+- [ ] 自然な対話フロー
+- [ ] VAD(Voice Activity Detection)実装
+- [ ] 無音検出・発話開始検出
+- [ ] Phase 3のウェイクワード検出準備
+- [ ] バッテリー効率最適化
+- [ ] モジュール化・単一責任構造の徹底
+
+## 🎯 Current Goal
+OpenAI Realtime APIによるストリーミングSTT統合と音声品質・レイテンシ最適化
+
+---
+
+
+
 ## 🏆 Phase 1達成内容（2025-07-19完成）
 
 ### ✅ 完全実装・テスト成功済み機能

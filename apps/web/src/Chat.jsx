@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import VoiceRecorder from './VoiceRecorder';
 import TextToSpeech from './TextToSpeech';
-import { sendChatMessage } from './services/apiClient';
 
 export default function Chat({ user, onSignOut, onSettings }) {
   const [messages, setMessages] = useState([
@@ -22,12 +21,28 @@ export default function Chat({ user, onSignOut, onSettings }) {
     setLoading(true);
     
     try {
-      const data = await sendChatMessage(userMessage, user?.id);
+      const response = await fetch('http://localhost:3001/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          userId: user.id
+        })
+      });
       
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.message
-      }]);
+      if (!response.ok) {
+        throw new Error(`API エラー: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      // server.jsのレスポンス形式に合わせて修正
+      const aiMessage = { role: 'assistant', content: result.message };
+      setMessages(msgs => [...msgs, aiMessage]);
+      
+      console.log('チャットAPIレスポンス:', result);
     } catch (error) {
       console.error('チャット送信エラー:', error);
       const errorMessage = { role: 'assistant', content: 'エラーが発生しました。もう一度お試しください。' };
@@ -56,7 +71,9 @@ export default function Chat({ user, onSignOut, onSettings }) {
   };
 
   return (
-    <div style={{maxWidth: 480, margin: '2rem auto', padding: 24, border: '1px solid #ddd', borderRadius: 8}}>
+    <div style={{display: 'flex', height: '100vh', maxWidth: '100%', margin: 0, padding: 0}}>
+      {/* 左側: 従来のチャット */}
+      <div style={{flex: 1, padding: 24, border: '1px solid #ddd', borderRadius: 8, margin: '1rem', maxWidth: 'calc(50% - 2rem)'}}>
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
           <button onClick={onSettings} style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, padding: 0}} title="設定">
@@ -142,6 +159,26 @@ export default function Chat({ user, onSignOut, onSettings }) {
           {loading ? '送信中...' : '送信'}
         </button>
       </form>
+      </div>
+      
+      {/* 右側: キャンバス */}
+      <div style={{flex: 1, padding: 24, border: '1px solid #ddd', borderRadius: 8, margin: '1rem', maxWidth: 'calc(50% - 2rem)', display: 'flex', flexDirection: 'column'}}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+          <h2 style={{margin: 0, fontSize: 18, color: '#374151'}}>🎤 音声キャンバス</h2>
+          <span style={{fontSize: 12, color: '#6b7280'}}>リアルタイム情報表示</span>
+        </div>
+        
+        {/* キャンバス表示エリア */}
+        <div style={{flex: 1, background: '#f8fafc', borderRadius: 6, padding: 16, overflowY: 'auto', marginBottom: 16}}>
+          <div style={{textAlign: 'center', color: '#6b7280', padding: '2rem 0'}}>
+            <div style={{fontSize: 48, marginBottom: 16}}>🎨</div>
+            <p>音声認識結果がここに表示されます</p>
+            <p style={{fontSize: 14}}>「今日の天気は？」「明日の予定は？」など話しかけてみてください</p>
+          </div>
+        </div>
+        
+        {/* キャンバス専用エリア（フォームなし） */}
+      </div>
     </div>
   );
 }

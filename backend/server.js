@@ -383,6 +383,15 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend API server running on http://localhost:${PORT}`);
+// HTTPサーバーを生成し、ExpressアプリとWebSocketで共有
+const http = require('http');
+const { createWebSocketServer } = require('./websocketServer');
+
+const server = http.createServer(app);
+
+// WebSocketサーバー起動
+createWebSocketServer(server);
+
+server.listen(PORT, () => {
+  console.log(`Backend API & WebSocket server running on http://localhost:${PORT}`);
 });

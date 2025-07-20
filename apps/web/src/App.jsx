@@ -4,7 +4,7 @@ import Chat from './Chat';
 import Settings from './Settings';
 import './App.css';
 import { AuthProvider, useAuth } from './AuthContext';
-import { getAvailableAIs } from './services/apiClient';
+import AudioStreamTest from './AudioStreamTest';
 
 function AppContent() {
   const { user, loading, signUp, signIn, signOut } = useAuth();
@@ -16,13 +16,13 @@ function AppContent() {
   // Settings画面表示時のみAPI取得
   useEffect(() => {
     if (showSettings) {
-      getAvailableAIs()
+      fetch("http://localhost:3001/api/available-ais")
+        .then(res => res.json())
         .then(data => {
           setAvailableAIs(data.ais || {});
           setAvailableModels(data.models || {});
         })
-        .catch(error => {
-          console.error('Failed to fetch available AIs:', error);
+        .catch(() => {
           setAvailableAIs({});
           setAvailableModels({});
         });
@@ -55,6 +55,7 @@ function AppContent() {
 
   return (
     <div>
+      <AudioStreamTest />
       {user ? (
         showSettings ? (
           <Settings
