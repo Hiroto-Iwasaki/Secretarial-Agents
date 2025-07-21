@@ -1,8 +1,9 @@
 // AudioStreamTest.jsx
-// WebSocket経由リアルタイムSTTテスト（Phase2 PoC）
+// WebSocket経由リアルタイムSTTテスト（Phase2.5 - VAD制御）
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useUserAISettings } from './hooks/useUserAISettings';
+import { VADProcessor } from './audio/VADProcessor';
 
 export default function AudioStreamTest() {
   const [recording, setRecording] = useState(false);
@@ -10,9 +11,16 @@ export default function AudioStreamTest() {
   const [messages, setMessages] = useState([]);
   const [sttReady, setSttReady] = useState(false);
   const [transcriptionText, setTranscriptionText] = useState('');
+  const [vadActive, setVadActive] = useState(false);
+  const [currentVolume, setCurrentVolume] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
   const wsRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-  const continuousRecordingRef = useRef(false); // 継続録音制御用
+  const vadProcessorRef = useRef(null);
+  const audioStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  
   const { user } = useAuth();
   const { settings, fetchSettings } = useUserAISettings(user);
 
@@ -77,67 +85,121 @@ export default function AudioStreamTest() {
 
   const startRecording = async () => {
     if (!sttReady) return;
-    if (mediaRecorderRef.current) return;
+    if (vadActive) return;
+    
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new window.MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
+      // 音声ストリーム取得
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000
+        }
+      });
+      audioStreamRef.current = stream;
       
-      let chunks = [];
+      // VADProcessor初期化
+      vadProcessorRef.current = new VADProcessor({
+        volumeThreshold: 0.08,
+        speechStartDelay: 150,
+        speechEndDelay: 1000,
+        minSpeechDuration: 800,
+        maxSpeechDuration: 30000,
+        debug: true
+      });
+      
+      // VADイベントハンドラー設定
+      vadProcessorRef.current.onSpeechStart = () => {
+        setIsSpeaking(true);
+        startSpeechRecording();
+        setMessages(msgs => [...msgs, '[VAD] 発話開始検出']);
+      };
+      
+      vadProcessorRef.current.onSpeechEnd = (duration) => {
+        setIsSpeaking(false);
+        stopSpeechRecording();
+        setMessages(msgs => [...msgs, `[VAD] 発話終了検出 (${duration}ms)`]);
+      };
+      
+      vadProcessorRef.current.onVolumeChange = (volume) => {
+        setCurrentVolume(volume);
+      };
+      
+      // VAD開始
+      await vadProcessorRef.current.start(stream);
+      setVadActive(true);
+      setRecording(true);
+      setMessages(msgs => [...msgs, '[VAD] 発話区間検出開始']);
+      
+    } catch (err) {
+      setMessages(msgs => [...msgs, '[error] VAD開始失敗: ' + err.message]);
+    }
+  };
+  
+  const startSpeechRecording = () => {
+    if (!audioStreamRef.current) return;
+    
+    try {
+      const mediaRecorder = new window.MediaRecorder(audioStreamRef.current, { 
+        mimeType: 'audio/webm' 
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          chunks.push(e.data);
+          audioChunksRef.current.push(e.data);
         }
       };
       
       mediaRecorder.onstop = () => {
-        // 完全なwebmファイルを作成
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         if (wsRef.current && wsRef.current.readyState === 1 && blob.size > 0) {
           blob.arrayBuffer().then(buf => {
-            console.log('[client] 完全webm送信: サイズ', buf.byteLength);
+            console.log('[client] 発話区間webm送信: サイズ', buf.byteLength);
             wsRef.current.send(buf);
           });
         }
-        stream.getTracks().forEach(track => track.stop());
         mediaRecorderRef.current = null;
-        chunks = [];
-        
-        // 3秒後に自動で次の録音開始（継続的な認識）
-        if (continuousRecordingRef.current) {
-          setTimeout(() => {
-            if (continuousRecordingRef.current) startRecording();
-          }, 500);
-        }
+        audioChunksRef.current = [];
       };
       
       mediaRecorder.start();
-      setRecording(true);
-      continuousRecordingRef.current = true; // 継続録音フラグをセット
-      setMessages(msgs => [...msgs, '[rec] 3秒間録音開始']);
-      
-      // 3秒後に自動停止
-      setTimeout(() => {
-        if (mediaRecorder.state === 'recording') {
-          mediaRecorder.stop();
-        }
-      }, 3000);
       
     } catch (err) {
-      setMessages(msgs => [...msgs, '[error] マイク取得失敗: ' + err.message]);
+      setMessages(msgs => [...msgs, '[error] 発話録音開始失敗: ' + err.message]);
+    }
+  };
+  
+  const stopSpeechRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
     }
   };
 
   const stopRecording = () => {
-    // 継続録音を停止
-    continuousRecordingRef.current = false;
+    // VAD停止
+    if (vadProcessorRef.current) {
+      vadProcessorRef.current.stop();
+      vadProcessorRef.current = null;
+    }
     
+    // 録音停止
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
     
+    // 音声ストリーム停止
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
+    }
+    
+    setVadActive(false);
     setRecording(false);
-    setMessages(msgs => [...msgs, '[rec] 継続認識停止']);
+    setIsSpeaking(false);
+    setCurrentVolume(0);
+    setMessages(msgs => [...msgs, '[VAD] 発話区間検出停止']);
   };
 
   const disconnectWS = () => {
@@ -161,17 +223,40 @@ export default function AudioStreamTest() {
       <div>
         <button onClick={connectWS} disabled={connected || recording}>1. Connect</button>
         <button onClick={startSTTMode} disabled={!connected || !user || !settings?.stt_model || sttReady}>2. STT Mode</button>
-        <button onClick={startRecording} disabled={!sttReady || recording}>3. 継続認識開始</button>
-        <button onClick={stopRecording} disabled={!recording}>4. 認識停止</button>
+        <button onClick={startRecording} disabled={!sttReady || recording}>3. VAD録音開始</button>
+        <button onClick={stopRecording} disabled={!recording}>4. VAD録音停止</button>
         <button onClick={disconnectWS} disabled={!connected || recording}>Disconnect</button>
       </div>
+      
+      {/* VAD状態表示 */}
+      {vadActive && (
+        <div style={{ marginTop: 12, padding: 8, background: '#f0f8ff', border: '1px solid #4169e1' }}>
+          <div><b>VAD状態:</b> {isSpeaking ? '🗣️ 発話中' : '🤫 待機中'}</div>
+          <div><b>音量レベル:</b> 
+            <div style={{ 
+              width: '200px', 
+              height: '10px', 
+              background: '#ddd', 
+              marginTop: '4px',
+              position: 'relative'
+            }}>
+              <div style={{
+                width: `${currentVolume * 100}%`,
+                height: '100%',
+                background: isSpeaking ? '#ff4444' : '#44ff44',
+                transition: 'width 0.1s'
+              }}></div>
+            </div>
+          </div>
+        </div>
+      )}
       {transcriptionText && (
         <div style={{ marginTop: 12, padding: 8, background: '#e8f5e8', border: '1px solid #4caf50' }}>
           <b>認識結果:</b> {transcriptionText}
         </div>
       )}
       <div style={{ marginTop: 8 }}>
-        <b>Status:</b> {connected ? (sttReady ? (recording ? '録音中' : 'STT準備完了') : '接続中') : '未接続'}
+        <b>Status:</b> {connected ? (sttReady ? (recording ? (vadActive ? 'VAD録音中' : '録音中') : 'STT準備完了') : '接続中') : '未接続'}
       </div>
       <div style={{ marginTop: 8 }}>
         <b>Log:</b>

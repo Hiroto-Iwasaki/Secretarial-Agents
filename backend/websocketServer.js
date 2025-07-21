@@ -1,5 +1,5 @@
 // backend/websocketServer.js
-// Phase 2: WebSocketサーバー基盤（単一責任原則・拡張性重視）
+// Phase 2.5: WebSocketサーバー基盤 - VAD対応発話区間ベース処理（単一責任原則・拡張性重視）
 
 const WebSocket = require('ws');
 
@@ -21,11 +21,12 @@ function createWebSocketServer(server) {
     // 初期メッセージ送信
     ws.send(JSON.stringify({ type: 'welcome', message: 'WebSocket接続成功' }));
 
-    // --- Phase2: STTストリーミング分岐PoC ---
+    // --- Phase2.5: STTストリーミング - VAD対応発話区間ベース処理 ---
     let sttMode = null; // 'openai:whisper-1', 'gemini:default' etc
     let sttStreaming = false;
     const { sttFactory } = require('./sttProviders/sttFactory');
     let sttStreamActive = false;
+    let speechSegmentBuffer = []; // 発話区間バッファ
 
     // メッセージ受信
     ws.on('message', (data, isBinary) => {
@@ -34,35 +35,64 @@ function createWebSocketServer(server) {
         audioBuffers.push(Buffer.from(data));
         console.log('バイナリデータ受信（長さ: ' + data.length + '）');
         
-        // --- STTストリーミングモード ---
+        // --- STTストリーミングモード - VAD対応発話区間ベース処理 ---
         if (sttStreaming && sttMode) {
+          // 発話区間バッファに追加
+          speechSegmentBuffer.push(Buffer.from(data));
+          console.log(`発話区間データ受信: ${data.length}bytes, バッファ合計: ${speechSegmentBuffer.length}チャンク`);
+          
+          // 発話区間完了として即座に処理（VADで区切られた完全な発話）
           if (!sttStreamActive) {
-            // ストリーミング開始
             sttStreamActive = true;
-            console.log('STTストリーミング開始: audioBuffers.length=' + audioBuffers.length);
-            // バッファをストリームとして扱う（PoC: まとめて渡す）
-            setTimeout(() => {
-              const audioStream = Buffer.concat(audioBuffers);
-              console.log('STT処理開始: audioStream.length=' + audioStream.length);
+            
+            // 発話区間を結合
+            const speechSegment = Buffer.concat(speechSegmentBuffer);
+            console.log(`発話区間STT処理開始: ${speechSegment.length}bytes`);
+            
+            try {
+              // STTファクトリーでプロバイダー選択
+              const { provider, model, options } = sttFactory.createFromSettings(sttMode);
+              console.log(`STTプロバイダー: ${provider.getProviderName()}, モデル: ${model}`);
               
-              try {
-                // STTファクトリーでプロバイダー選択
-                const { provider, model, options } = sttFactory.createFromSettings(sttMode);
-                console.log(`STTプロバイダー: ${provider.getProviderName()}, モデル: ${model}`);
+              provider.transcribe(speechSegment, (text) => {
+                console.log(`STT認識結果: "${text}"`);
+                ws.send(JSON.stringify({ 
+                  type: 'stt_result', 
+                  text,
+                  segmentSize: speechSegment.length,
+                  timestamp: Date.now()
+                }));
                 
-                provider.transcribe(audioStream, (text) => {
-                  ws.send(JSON.stringify({ type: 'stt_result', text }));
-                }, (err) => {
-                  ws.send(JSON.stringify({ type: 'error', message: 'STTエラー: ' + err.message }));
-                }, options);
-              } catch (err) {
-                console.error('STTファクトリーエラー:', err);
-                ws.send(JSON.stringify({ type: 'error', message: 'STTプロバイダーエラー: ' + err.message }));
-              }
+                // 処理完了後のクリーンアップ
+                sttStreamActive = false;
+                speechSegmentBuffer = [];
+                audioBuffers = [];
+              }, (err) => {
+                console.error('STT処理エラー:', err);
+                ws.send(JSON.stringify({ 
+                  type: 'error', 
+                  message: 'STTエラー: ' + err.message,
+                  segmentSize: speechSegment.length
+                }));
+                
+                // エラー時のクリーンアップ
+                sttStreamActive = false;
+                speechSegmentBuffer = [];
+                audioBuffers = [];
+              }, options);
               
+            } catch (err) {
+              console.error('STTファクトリーエラー:', err);
+              ws.send(JSON.stringify({ 
+                type: 'error', 
+                message: 'STTプロバイダーエラー: ' + err.message 
+              }));
+              
+              // エラー時のクリーンアップ
               sttStreamActive = false;
+              speechSegmentBuffer = [];
               audioBuffers = [];
-            }, 1000); // PoC: 1秒ごとにまとめて送信
+            }
           }
         }
       } else {
@@ -78,12 +108,15 @@ function createWebSocketServer(server) {
               // STTファクトリーでプロバイダー検証
               const { provider, model } = sttFactory.createFromSettings(sttMode);
               sttStreaming = true;
+              speechSegmentBuffer = []; // バッファ初期化
+              
               ws.send(JSON.stringify({ 
                 type: 'stt_ack', 
-                message: `${provider.getProviderName()} STTモード開始`,
-                stt_model: sttMode
+                message: `${provider.getProviderName()} VAD対応STTモード開始`,
+                stt_model: sttMode,
+                mode: 'speech_segment_based'
               }));
-              console.log('[WebSocket] stt_ack送信完了:', provider.getProviderName());
+              console.log('[WebSocket] VAD対応stt_ack送信完了:', provider.getProviderName());
             } catch (err) {
               console.error('[WebSocket] STTプロバイダーエラー:', err);
               ws.send(JSON.stringify({ 
