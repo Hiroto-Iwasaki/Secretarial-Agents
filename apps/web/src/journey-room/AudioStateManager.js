@@ -1,16 +1,19 @@
 // AudioStateManager.js
-// 音声状態管理・ウェイクワード検出・VAD統合（単一責任原則）
+// 音声状態管理・VAD統合・WebSocket通信（単一責任原則）
 import { VADProcessor } from '../audio/VADProcessor';
+import WakeWordDetector from './WakeWordDetector';
 
 export default class AudioStateManager {
   constructor() {
     // 状態管理
     this.isActive = false;
     this.currentMode = 'idle';
-    this.wakeWordModel = null;
     this.vadProcessor = null;
     this.audioStream = null;
     this.wsConnection = null;
+    
+    // ウェイクワード検出器
+    this.wakeWordDetector = new WakeWordDetector();
     
     // コールバック
     this.onWakeWordDetected = null;
@@ -20,11 +23,6 @@ export default class AudioStateManager {
     // 設定
     this.settings = null;
     this.user = null;
-    
-    // ウェイクワード検出状態
-    this.wakeWordBuffer = [];
-    this.lastWakeWordCheck = 0;
-    this.wakeWordThreshold = 0.8; // 類似度閾値
     
     // 音声データ
     this.currentAudioData = {
@@ -44,8 +42,9 @@ export default class AudioStateManager {
     this.user = user;
     
     try {
-      // ウェイクワードモデル読み込み
-      await this.loadWakeWordModel();
+      // ウェイクワード検出器初期化
+      this.wakeWordDetector.onWakeWordDetected = this.handleWakeWordDetection.bind(this);
+      await this.wakeWordDetector.initialize(user);
       
       // WebSocket接続
       await this.connectWebSocket();
@@ -71,6 +70,11 @@ export default class AudioStateManager {
   stop() {
     this.isActive = false;
     
+    // ウェイクワード検出器停止
+    if (this.wakeWordDetector) {
+      this.wakeWordDetector.stop();
+    }
+    
     // VAD停止
     if (this.vadProcessor) {
       this.vadProcessor.stop();
@@ -93,25 +97,7 @@ export default class AudioStateManager {
     console.log('[AudioStateManager] 停止完了');
   }
 
-  // ウェイクワードモデル読み込み
-  async loadWakeWordModel() {
-    try {
-      const response = await fetch(`http://localhost:3001/api/journey-room/wake-word-model?userId=${this.user.id}`, {
-        headers: { 'Authorization': `Bearer ${this.user.access_token}` }
-      });
-      
-      if (!response.ok) {
-        throw new Error('ウェイクワードモデル読み込み失敗');
-      }
-      
-      this.wakeWordModel = await response.json();
-      console.log('[AudioStateManager] ウェイクワードモデル読み込み完了');
-      
-    } catch (error) {
-      console.error('[AudioStateManager] ウェイクワードモデル読み込みエラー:', error);
-      throw error;
-    }
-  }
+
 
   // WebSocket接続
   async connectWebSocket() {
@@ -189,39 +175,17 @@ export default class AudioStateManager {
   handleSTTResult(text) {
     console.log('[AudioStateManager] STT結果:', text);
     
-    // ウェイクワード検出チェック
-    if (this.checkWakeWord(text)) {
-      this.handleWakeWordDetection();
-    }
+    // ウェイクワード検出（WakeWordDetectorクラス使用）
+    const isWakeWord = this.wakeWordDetector.checkWakeWordFromText(text);
     
-    // モード別処理
-    if (this.currentMode === 'listening') {
-      // 非同期処理パイプ（将来実装）
+    if (!isWakeWord) {
+      // 非同期音声処理
       this.processAsyncSpeech(text);
     }
+    // ウェイクワード検出時の処理はWakeWordDetectorクラス内で実行
   }
 
-  // ウェイクワード検出
-  checkWakeWord(text) {
-    const normalizedText = text.toLowerCase().trim();
-    
-    // 簡易的な文字列マッチング（実際は音声特徴量比較）
-    const wakeWords = ['ジャーニー', 'journey', 'じゃーにー'];
-    
-    for (const wakeWord of wakeWords) {
-      if (normalizedText.includes(wakeWord.toLowerCase())) {
-        console.log('[AudioStateManager] ウェイクワード検出:', wakeWord);
-        return true;
-      }
-    }
-    
-    // 将来的には音声特徴量による高精度検出
-    // return this.compareAudioFeatures(audioFeatures, this.wakeWordModel);
-    
-    return false;
-  }
-
-  // ウェイクワード検出時の処理
+  // ウェイクワード検出時の処理（WakeWordDetectorからのコールバック）
   handleWakeWordDetection() {
     console.log('[AudioStateManager] ウェイクワード検出 - 同期モード起動');
     
@@ -378,7 +342,8 @@ export default class AudioStateManager {
       currentMode: this.currentMode,
       wsConnected: this.wsConnected,
       sttReady: this.sttReady,
-      audioData: this.currentAudioData
+      audioData: this.currentAudioData,
+      wakeWordDetector: this.wakeWordDetector.getState()
     };
   }
 }

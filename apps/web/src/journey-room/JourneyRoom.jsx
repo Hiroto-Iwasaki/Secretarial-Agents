@@ -185,6 +185,36 @@ export default function JourneyRoom() {
     setCurrentMode(newMode);
   };
 
+  // ウェイクワード学習データリセット
+  const resetWakeWordTraining = async () => {
+    if (!audioStateManagerRef.current?.wakeWordDetector) {
+      console.error('ウェイクワード検出器が初期化されていません');
+      return;
+    }
+
+    try {
+      const result = await audioStateManagerRef.current.wakeWordDetector.resetTrainingData();
+      
+      // UI状態をリセット
+      setWakeWordTrained(false);
+      setWakeWordStatus({
+        trained: false,
+        trainingCount: 0,
+        lastTraining: null
+      });
+      
+      console.log('ウェイクワード学習データリセット完了:', result.message);
+      
+      // Journey Roomがアクティブな場合は停止
+      if (isActive) {
+        deactivateJourneyRoom();
+      }
+      
+    } catch (error) {
+      console.error('ウェイクワード学習データリセットエラー:', error);
+    }
+  };
+
   // デバッグ用ログ
   console.log('[JourneyRoom] レンダリング開始', { isActive, currentMode, wakeWordTrained });
 
@@ -299,6 +329,25 @@ export default function JourneyRoom() {
             <div className="settings-info">
               <small>STT: {settings?.stt_model || '未設定'}</small>
               <small>AI: {settings?.ai_model || '未設定'}</small>
+            </div>
+            
+            {/* ウェイクワード学習リセットボタン */}
+            <div className="reset-controls" style={{ marginTop: '15px' }}>
+              <button
+                onClick={resetWakeWordTraining}
+                style={{
+                  padding: '8px 16px',
+                  background: '#ff4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '15px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+                title="ウェイクワード学習データを完全にリセットします"
+              >
+                🗑️ 学習データリセット
+              </button>
             </div>
           </div>
         )}

@@ -383,4 +383,115 @@ router.post('/geometric-config', (req, res) => {
   }
 });
 
+// ウェイクワード学習データリセット
+router.delete('/wake-word-training', async (req, res) => {
+  const { userId } = req.query;
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'ユーザーIDが必要です' });
+  }
+  
+  try {
+    // Supabaseからデータ削除
+    const { error } = await supabase
+      .from('wake_word_training')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('ウェイクワード学習データ削除エラー:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'データベースからの削除に失敗しました'
+      });
+    }
+    
+    // ローカル音声ファイル削除
+    let deletedFiles = 0;
+    for (let i = 1; i <= 3; i++) {
+      const fileName = `${userId}_wake_word_${i}.wav`;
+      const filePath = path.join(WAKE_WORD_DIR, fileName);
+      
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          deletedFiles++;
+          console.log(`削除完了: ${fileName}`);
+        } catch (fileError) {
+          console.warn(`ファイル削除失敗: ${fileName}`, fileError);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'ウェイクワード学習データをリセットしました',
+      deletedFiles,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('ウェイクワード学習データリセットエラー:', error);
+    res.status(500).json({
+      success: false,
+      error: 'ウェイクワード学習データのリセットに失敗しました'
+    });
+  }
+});
+
+// ウェイクワードモデルリセット（学習データリセットのエイリアス）
+router.delete('/wake-word-model', async (req, res) => {
+  const { userId } = req.query;
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'ユーザーIDが必要です' });
+  }
+  
+  try {
+    // 学習データリセットと同じ処理
+    const { error } = await supabase
+      .from('wake_word_training')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.error('ウェイクワードモデル削除エラー:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'モデルの削除に失敗しました'
+      });
+    }
+    
+    // ローカル音声ファイル削除
+    let deletedFiles = 0;
+    for (let i = 1; i <= 3; i++) {
+      const fileName = `${userId}_wake_word_${i}.wav`;
+      const filePath = path.join(WAKE_WORD_DIR, fileName);
+      
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          deletedFiles++;
+        } catch (fileError) {
+          console.warn(`ファイル削除失敗: ${fileName}`, fileError);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'ウェイクワードモデルをリセットしました',
+      deletedFiles,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('ウェイクワードモデルリセットエラー:', error);
+    res.status(500).json({
+      success: false,
+      error: 'ウェイクワードモデルのリセットに失敗しました'
+    });
+  }
+});
+
 module.exports = router;
