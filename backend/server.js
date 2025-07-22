@@ -6,6 +6,7 @@ const fileUpload = require('express-fileupload');
 const { supabase } = require('./supabaseClient');
 const { openai } = require('./openaiClient');
 const modelsConfig = require('./config/models.json');
+const journeyRoomRouter = require('./routes/journeyRoom');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -382,6 +383,9 @@ app.post('/api/tts', async (req, res) => {
     res.status(500).json(errorResponse);
   }
 });
+
+// Journey Room API Routes
+app.use('/api/journey-room', journeyRoomRouter);
 
 // HTTPサーバーを生成し、ExpressアプリとWebSocketで共有
 const http = require('http');

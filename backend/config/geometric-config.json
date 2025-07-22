@@ -1,0 +1,30 @@
+{
+  "idle": {
+    "formula": "sin(t * 0.5) * cos(r * 0.3)",
+    "colors": ["#0066cc", "#004499", "#0088ff"],
+    "speed": 0.02,
+    "amplitude": 1.0,
+    "frequency": 1.0
+  },
+  "listening": {
+    "formula": "sin(t * 2 + r) * audioLevel * 2",
+    "colors": ["#00ff88", "#00cc66", "#00ffaa"],
+    "speed": 0.1,
+    "amplitude": 2.0,
+    "frequency": 2.0
+  },
+  "processing": {
+    "formula": "cos(t * 3) * sin(r * 2) * 1.5",
+    "colors": ["#ff8800", "#cc6600", "#ffaa00"],
+    "speed": 0.15,
+    "amplitude": 1.5,
+    "frequency": 3.0
+  },
+  "responding": {
+    "formula": "sin(t + r * 0.5) * cos(t * 0.8)",
+    "colors": ["#ff0066", "#cc0044", "#ff0088"],
+    "speed": 0.08,
+    "amplitude": 1.2,
+    "frequency": 1.5
+  }
+}
